@@ -2,6 +2,7 @@
 
 ### Doc folder
 
-The doc directory contains the report or presentation files.
-- contains data pre-processing file
+The doc directory contains the report or presentation files:
+- data pre-processing file
+- ShinyApp example of wordclouds, pairs, and lyrics data
 
