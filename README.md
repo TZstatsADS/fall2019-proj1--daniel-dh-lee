@@ -5,7 +5,7 @@
 <img src="figs/evolution.jpg" width="500">
 
 ### [Project Description](doc/)
-The change of music trend
+Analyzing the change of music trend and deeper text mining for Rock genre
 
 Term: Fall 2019
 
