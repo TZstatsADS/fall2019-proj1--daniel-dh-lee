@@ -9,7 +9,7 @@ Show the data story of the music trend
 
 Term: Fall 2019
 
-+ Projec title: Analysis of music starting from 1960s
++ Projec title: Analysis of music starting from 1960s - the rise of Rock
 + This project is conducted by Daniel Lee
 
 + The goal of this project is to look deeper into the patterns and characteristics of different types of song lyrics. Applying tools from natural language processing and text mining, students should derive interesting findings in this collection of song lyrics and write a "data story" that can be shared with a general audience.
