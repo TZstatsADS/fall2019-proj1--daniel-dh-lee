@@ -20,7 +20,7 @@ Term: Fall 2019
 - "lyrics.csv" ([Download](https://www.dropbox.com/s/3tfv5v73z0ec8vr/lyrics.csv?dl=0)) is a filtered corpus of 100,000+ song lyrics from MetroLyrics. Available features are song name, year, artist, genre, and lyrics. You can find the complete 380,000+ song lyrics data on [Kaggle](https://www.kaggle.com/gyani95/380000-lyrics-from-metrolyrics). A ```lyrics.RData``` file is also provided in the [\data folder](../data/).
 - "artists.csv" (in the [\data folder](../data/)) provides additional background information of all the artistis. These information were scraped from [LyricsFreak](https://www.lyricsfreak.com/) by the ADS instructional team. For the singers, a detailed biography is provided. And for the bands, available information are members, established year and location. 
 
-### [Project Report](doc/)
+### [Project Report](doc/proj1.html)
 
 This folder is orgarnized as follows:
 ```
