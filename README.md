@@ -2,7 +2,7 @@
 ## Fall 2019
 ## Project 1: A "data story" on the songs of our times
 
-<img src="figs/evolution.jpeg" width="500">
+<img src="figs/evolution.jpg" width="500">
 
 ### [Project Description](doc/)
 The change of music trend
