@@ -1,0 +1,356 @@
+---
+title: "ADS Project1"
+author: "Daniel Lee"
+date: "9/16/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r,warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+# loading libraries
+library(ggplot2)
+library(plotly)
+library(forcats)
+library(tidyverse)
+library(dplyr)
+library(reshape2)
+library(wordcloud)
+library(stringr)
+library(tidyr)
+library(tidytext)
+library(yarrr)
+library(koRpus)
+library(tm)
+library(data.table)
+library(DT)
+library(quanteda)
+library(pacman)
+```
+```{r load data, warning=FALSE, message=FALSE}
+# load lyrics data
+dt_lyrics <- load('../output/processed_lyrics.RData') 
+#load('../data/lyrics.RData')
+# load artist information
+dt_artist <- read.csv('../data/artists.csv')
+```
+
+# Welcome to the music world!
+
+## First, Let's take a look at the artist data
+```{r}
+# number of artists formed
+## 1951 to 2006
+plot_ly(x = ~sort(dt_artist$Formed, decreasing=FALSE), type = "histogram") %>%
+  layout(xaxis = list(range=c(1950,2010,5), type="category", title="Years"),
+         yaxis = list(title="Counts"),
+         title = "Number of artists formed")
+## Ignoring 1825 NA values
+```
+
+This plot shows number of artists formed over the years. Based on this, we can see that a lot of artists were formed in late 1990s. Is this trend going to be consistant with the lyrics data?
+
+Before we start comparing, let's clean/manage the lyrics data. I did the text processing from the given code. The text processing goes in these steps: 
+1. Eliminate white spaces and stop words from lyrics.
+2. Stemming words and converting tm object to tidy object
+3. Creating tidy format of the dictionary to be used for completing stems
+4. Combining stems and dictionary into the same tibble
+5. Stem completion
+6. Pasting stem completed individual words into their respective lyrics
+7. Keeping a track of the processed lyrics with their own ID
+After this process, I also added character count, word count and decade categorization below. Also, I excluded NA values and two outliers that have a weird year dates.
+
+```{r, echo=FALSE}
+# additional data processing
+dt_lyrics$charcount <- nchar(dt_lyrics$stemmedwords)
+dt_lyrics$deca <- case_when(
+                    dt_lyrics$year < 1980 & dt_lyrics$year >= 1970  ~ "1970s",
+                    dt_lyrics$year < 1990 & dt_lyrics$year >= 1980  ~ "1980s",
+                    dt_lyrics$year < 2000 & dt_lyrics$year >= 1990  ~ "1990s",
+                    dt_lyrics$year < 2010 & dt_lyrics$year >= 2000  ~ "2000s",
+                    dt_lyrics$year < 2020 & dt_lyrics$year >= 2010  ~ "2010s",
+                      )
+dt_lyrics$wordcount <- sapply(strsplit(dt_lyrics$stemmedwords, " "), length)
+
+timeseries <- as.data.frame(dt_lyrics, na.rm = TRUE)
+# excluding outlier
+timeseries <- timeseries[c(-91131,-64357),]
+```
+
+## We are now ready to look into the lyrics data!
+### Overview of the data
+Let's see number of songs as year progresses.  
+```{r}
+plot_ly(x=~sort(timeseries$year, decreasing = TRUE), type="histogram") %>%
+    layout(xaxis = list(range=c(1950,2010,5), type="category", title="Years"),
+         yaxis = list(title="Counts"))
+```
+First, we can say that there is no correlation between the artists and lyrics data. This plot shows that there is a huge peak in 2006 and 2007, while the artist datashows peak in late 1990s. It seems these two numbers are abnormally large, so let's try to look into this.
+
+```{r}
+# number of songs by genre
+ggplot(timeseries, aes(deca)) +
+  geom_bar(aes(fill=genre), position = 'dodge') +
+  ggtitle("Number of songs by each decade") +
+  labs(x="Decade", y="Counts", fill="Genre") +
+  scale_fill_brewer(palette="Paired")
+
+```
+According to his bar plot, we can tell that the reason for that peak comes from the rise of the rock. We can also see the rise of Pop and Hip-hop from the 1990s to 2000s. It might seem weird to see total number of songs decrease from 2000s to 2010s, but this is due the characteristics of the data. the max year for songs is 2016. 
+
+Since the number of songs vary a lot from decade to decade, let's try to see average length of the song.
+```{r,echo=FALSE}
+#### average length of songs
+wc_mean <- aggregate(timeseries[,'wordcount'],list(timeseries$deca),mean)
+
+plot_ly(wc_mean, x=~Group.1, y=~x, type='bar') %>%
+    layout(xaxis = list(range=c(1960,2010,5), title='Years'), 
+           yaxis=list(title='Avg length'))
+```
+From the plot above, we can definitely see the length of songs has increased.
+
+Now, we want to see if there a correlation between number of words and number of characters? This could be an interesting question because recent Hip-hop songs use a lot of short, meaningless words like skrt, ay, etc. This could significantly increase number of word counts, but does not affect number of characters a lot. 
+```{r,echo=FALSE}
+par(mfrow=c(1,2))
+ggplot(timeseries, aes(x=deca,y = charcount, fill = genre)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  ggtitle("Character count of songs by each decade") +
+  labs(x="Decade", y="Character counts", fill="Genre") +
+  scale_fill_brewer(palette="Paired")
+ggplot(timeseries, aes(x=deca,y = wordcount, fill = genre)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  ggtitle("Word count of songs by each decade") +
+  labs(x="Decade", y="Word counts", fill="Genre") +
+  scale_fill_brewer(palette="Paired")
+```
+However, these two charts show us that number of words and number of characters are higly correlated and consistent around all genres.
+
+What if we exclude the influence of the Rock music?
+```{r, warning=FALSE, echo=FALSE}
+#time series as time goes
+ts_genre <- timeseries %>%
+  select(year, genre) %>%
+  group_by(year, genre) %>%
+  count()
+# ggplot(data=ts_genre,aes(x=year,y=n,color=genre)) +
+#   geom_line() +
+#   scale_color_brewer(palette="Paired")
+
+#without rock
+not_rock <- ts_genre[ts_genre$genre != "Rock",]
+ggplot(data=not_rock,aes(x=year,y=n,color=genre)) +
+   geom_line() +
+  labs(x="Year", y="Number of songs", color="Genre") +
+  ggtitle("Number of songs without Rock") +
+   scale_color_brewer(palette="Paired")
+```
+Still, the number of songs increased significantly from early 2000s. Thus, we can conclude that the music industry boomed starting from early 2000s.
+
+We have general trend of music industry now.
+Wondering which words were used most frequently over 40 years across all genres?
+```{r, echo=FALSE}
+# overall wordcloud
+count(word_tibble, word, sort = TRUE) %>%
+      wordcloud2(size=0.6, rotateRatio=0.2)
+```
+Love wast the most popular one! We can see couple big texts, including love, time, youre, baby, hear, girl, etc. It might seem obvious, but many popular words are related to emotions or something that could describe someone.
+
+### Let's Rock n Roll
+<img src="figs/rnr.jpeg" width="500">
+Since we've seen the impact of the rock, let's look closely into Rock music. We just saw the overal popularity of words across all genres. What about Rock?
+```{r}
+count(filter(word_tibble, id %in% which(dt_lyrics$genre == "Rock")), word, sort = TRUE) %>%
+      wordcloud2(size=0.6, rotateRatio=0.2)
+```
+Of couse, Rock wordcloud shows some similar words. (Since Rock has a major port in the data) We see more words relating to emotions and feelings. This wants me to look into the sentiment analysis of the Rock lyrics.
+
+```{r, message=FALSE, error=FALSE}
+corpus <- VCorpus(VectorSource(dt_lyrics$stemmedwords))
+word_tibble <- tidy(corpus) %>%
+  select(text) %>%
+  mutate(id = row_number()) %>%
+  unnest_tokens(word, text)
+# Rock tibble
+rock_tibble <- filter(word_tibble, id %in% which(dt_lyrics$genre == "Rock"))
+
+rock_sentiment <- rock_tibble %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(id, sentiment) %>%
+  spread(sentiment, n, fill = 0) %>%
+  mutate(sentiment = positive - negative)
+ggplot(rock_sentiment, aes(sentiment)) +
+  geom_bar(show.legend = FALSE)
+
+# positive, negative cloud
+
+rock_tibble %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("red", "skyblue"), max.words = 150)
+```
+The wordcloud shows both positive and negative words used in Rock songs. Looking at positive words, you can definitely say these lyrics are used to describe the person you love. On the other hand, negative words are mostly used to explain your feeling when you are heartbroken and how sad you are. You can easily create both positive/negative plot just from this wordcloud.
+
+Just by curiosity, let's compare the positive/negative words with the Hip-Hop genre. (Assuming there will be more intense negative words)
+```{r, message=FALSE}
+hip_tibble <- filter(word_tibble, id %in% which(dt_lyrics$genre == "Hip-Hop"))
+hip_tibble %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("red", "skyblue"), max.words = 150)
+
+```
+And...the assumption was right. We can cleary see that Hip-Hop genre uses more intense negative words in their songs. (Lots of swearing words) Also, positive words doesn't seem to have a same purpose like the Rock lyrics do. A lot of positive words are used to describe someone's physique or to show off something.
+
+Sentiment analysis above was based on the bing lexicon. However, this is not the only method. There are also AFINN and nrc. So, let's compare the difference between three sentiment methods.
+```{r, message=FALSE, error=FALSE, warning=FALSE}
+# referenced text mining in R - the book provided
+afinn <- rock_tibble %>% 
+  inner_join(get_sentiments("afinn")) %>% 
+  group_by(id) %>% 
+  summarise(sentiment = sum(value)) %>% 
+  mutate(method = "AFINN")
+
+bing_and_nrc <- bind_rows(
+  rock_tibble %>% 
+  inner_join(get_sentiments("bing")) %>%
+  mutate(method = "Bing et al."),
+  rock_tibble %>% 
+  inner_join(get_sentiments("nrc") %>% 
+  filter(sentiment %in% c("positive", "negative"))) %>%
+                            mutate(method = "NRC")) %>%
+  count(method, id, sentiment) %>%
+  spread(sentiment, n, fill = 0) %>%
+  mutate(sentiment = positive - negative)
+
+comparison_plot <- bind_rows(afinn, bing_and_nrc) %>%
+  ggplot(aes(id, sentiment, fill = method)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~method, ncol = 1, scales = "free_y") +
+  ylim(-100,100) +
+  labs(x="Index")
+comparison_plot
+```
+
+Three lexicon methods give different values as seen from the comparison plot. It might seem that AFINN method differs from Bing and NRC, but most of their trends are similar. AFINN values seems to fluctuare more than othe two methods. Overall, the absolute values are different, but they all have similar peaks and lows.
+
+Now we know general sentiments of the Rock lyrics. Then, we also want to see the development of lyrics. Did it become more complexed or simple? Diversed or uniform?
+
+Let's look into the lexical diversity first.
+```{r, echo=FALSE}
+# referenced from Debbie Liske's Datacamp tutorial
+rock <- dt_lyrics %>%
+  filter(genre == "Rock")
+
+word_summary <- rock %>%
+  mutate(deca = ifelse(is.na(deca),"NONE", deca)) %>%
+  group_by(deca,song) %>%
+  mutate(word_count = n_distinct(stemmedwords)) %>%
+  select(song, Released = deca, word_count) %>%
+  distinct() %>% #To obtain one record per song
+  ungroup()
+pirateplot(formula =  word_count ~ Released, #Formula
+   data = word_summary, #Data frame
+   xlab = NULL, ylab = "Distinct Word Count", #Axis labels
+   main = "Lexical Diversity Per Decade", #Plot title
+   pal = "google", #Color scheme
+   point.o = .2, #Points
+   avg.line.o = 1, #Turn on the Average/Mean line
+   theme = 0, #Theme
+   point.pch = 16, #Point `pch` type
+   point.cex = 1.5, #Point size
+   jitter.val = .1, #Turn on jitter to see the songs better
+   cex.lab = .9, cex.names = .7) #Axis label size
+```
+
+We can see that the lexical diversity drastically increased in 2000s. Interesting insight from this plot is that the distribution looks quite normal for 2000s and 2010s, but it seems pretty flat for 1970s to 90s. This might happned due to the nature of the lyrics data or the actual lexical diversity increased starting from 2000s with the booming music industry.
+
+Now, to the complexity of lyrics. In order to measure complexity, we can use readability package in R.
+```{r, echo=FALSE}
+rock_lyrics <- dt_lyrics %>%
+   filter(genre == "Rock")
+lyr70 <- rock_lyrics %>%
+  filter(deca == "1970s")
+lyr80<- rock_lyrics %>%
+  filter(deca == "1980s")
+lyr90<- rock_lyrics %>%
+  filter(deca == "1990s")
+lyr00<- rock_lyrics %>%
+  filter(deca == "2000s")
+lyr10<- rock_lyrics %>%
+  filter(deca == "2010s")
+reada_70 <- textstat_readability(lyr70$lyrics, measure = c("ARI", "Coleman", "Flesch", "RIX"))
+reada_80 <- textstat_readability(lyr80$lyrics, measure = c("ARI", "Coleman", "Flesch", "RIX"))
+reada_90 <- textstat_readability(lyr90$lyrics, measure = c("ARI", "Coleman", "Flesch", "RIX"))
+reada_00 <- textstat_readability(lyr00$lyrics, measure = c("ARI", "Coleman", "Flesch", "RIX"))
+reada_10 <- textstat_readability(lyr10$lyrics, measure = c("ARI", "Coleman", "Flesch", "RIX"))
+
+mean70 <- apply(reada_70[,2:5], 2, mean)
+mean80 <- apply(reada_80[,2:5], 2, mean)
+mean90 <- apply(reada_90[,2:5], 2, mean)
+mean00 <- apply(reada_00[,2:5], 2, mean)
+mean10 <- apply(reada_10[,2:5], 2, mean)
+
+reada_data <- data.frame(mean70,mean80,mean90,mean00,mean10)
+reada_data[3,] <- abs(reada_data[3,])
+colnames(reada_data) <- c("1970s","1980s","1990s","2000s","2010s")
+heatmap(as.matrix(reada_data),  scale="column", main = "Heatmap of Readability",xlab="Decade")
+
+```
+
+As we can see from the plot above, the readability differs by methods. ARI increase from 1970s to 1980s, decreases from 1980s to 2000s, but increases again in 2010s. For ARI, higher number means more complexity. Similarly, RIX shows the same trend. RIX value shows corresponding academic grade level to understand the songs. So, 1970s songs were interpretable for 10th graders, but 2010 songs seems to be understandable by 12th graders and up. Flesch values show the same trend as ARI and RIX. On the other hand, Coleman value stays quite stable for across all decades. Coleman method relies on characters instead of syllables per word.
+
+## In the future...
+It would be great to wait for 2019 to end and do a whole analysis on 2010s decade data. I assume we are going to see a different trend from 2000s to 2010s because the Rock music has lost popularity. The change of Hip-Hop and Pop music would be interesting to look into.
+
+
+```{r, echo=FALSE}
+#Appendix
+#Since Rock genre is dominating too much, let's see other genres
+
+#without rock
+# not_rock <- ts_genre[ts_genre$genre != "Rock",]
+# ggplot(data=not_rock,aes(x=year,y=n,color=genre)) +
+#   geom_line() +
+#   scale_color_brewer(palette="Paired")
+# 
+# 
+# # overall pirate plot
+# overall_summary <- dt_lyrics %>%
+#   mutate(deca = ifelse(is.na(deca),"NONE", deca)) %>%
+#   group_by(deca,song) %>%
+#   mutate(word_count = n_distinct(stemmedwords)) %>%
+#   mutate(rock = genre == "Rock") %>%
+#   select(song, Released = deca, word_count) %>%
+#   distinct() %>% #To obtain one record per song
+#   ungroup()
+# pirateplot(formula =  word_count ~ Released, #Formula
+#    data = overall_summary, #Data frame
+#    xlab = NULL, ylab = "Distinct Word Count", #Axis labels
+#    main = "Lexical Diversity Per Decade", #Plot title
+#    pal = "google", #Color scheme
+#    point.o = .2, #Points
+#    avg.line.o = 1, #Turn on the Average/Mean line
+#    theme = 0, #Theme
+#    point.pch = 16, #Point `pch` type
+#    point.cex = 1.5, #Point size
+#    jitter.val = .1, #Turn on jitter to see the songs better
+#    cex.lab = .9, cex.names = .7) #Axis label size
+# 
+# 
+# rock_count <- count(filter(word_tibble, id %in% which(dt_lyrics$genre == "Rock")), word, sort = TRUE)
+
+# rock_corpus <- VCorpus(VectorSource(rock_lyrics$lyrics))%>%
+#   tm_map(content_transformer(tolower))%>%
+#   tm_map(removePunctuation)%>%
+#   tm_map(removeWords, character(0))%>%
+#   tm_map(removeWords, stop_words)%>%
+#   tm_map(removeNumbers)%>%
+#   tm_map(stripWhitespace)%>%
+#   tm_map(leadingWhitespace)
+# readability(rock_corpus)
+```
+
