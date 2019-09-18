@@ -2,10 +2,10 @@
 ## Fall 2019
 ## Project 1: A "data story" on the songs of our times
 
-<img src="figs/imusic.png" width="500">
+<img src="figs/evolution.jpeg" width="500">
 
 ### [Project Description](doc/)
-Show the data story of the music trend
+The change of music trend
 
 Term: Fall 2019
 
